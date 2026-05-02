@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/mariusjahnsen/Documents/Claude/**)",
+      "Read(//Users/mariusjahnsen/.claude/**)",
+      "mcp__53c7e850-2bf8-4aa7-a83d-e83e658080ce__search_files",
+      "mcp__53c7e850-2bf8-4aa7-a83d-e83e658080ce__list_recent_files",
+      "mcp__53c7e850-2bf8-4aa7-a83d-e83e658080ce__read_file_content",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
