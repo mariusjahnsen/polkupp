@@ -9,7 +9,14 @@
       "Bash(npm install *)",
       "Bash(npm run *)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git -c user.email=mariusjahnsen@gmail.com -c 'user.name=Marius Jahnsen' commit -m 'init: scaffold Polkupp Vite/React app *)",
+      "Bash(vercel --yes --prod)",
+      "Bash(vercel --yes --prod --name polkupp)",
+      "Bash(vercel git *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | %{size_download} bytes | %{time_total}s\\\\n\" https://polkupp.vercel.app)",
+      "Bash(curl -s https://polkupp.vercel.app)",
+      "Bash(supabase init *)"
     ]
   }
 }
