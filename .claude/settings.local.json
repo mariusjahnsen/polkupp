@@ -46,7 +46,12 @@
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | %{size_download} bytes\\\\n\" https://polkupp.vercel.app)",
       "Bash(git -c user.email=mariusjahnsen@gmail.com -c 'user.name=Marius Jahnsen' commit -m 'feat\\(frontend\\): kategori-filter, sortering, søk, paginering *)",
       "Bash(git -c user.email=mariusjahnsen@gmail.com -c 'user.name=Marius Jahnsen' commit -m 'feat\\(scheduling\\): GitHub Actions daglig sync 06:00 UTC *)",
-      "Bash(gh workflow *)"
+      "Bash(gh workflow *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(node scripts/enrich-wines.mjs --wine-id=004a5398-36d7-4860-9988-9b9880d90c2f)",
+      "Bash(node scripts/enrich-wines.mjs --wine-id=5049b2dd-7374-4fdc-abd8-d345dbc20e07)",
+      "Bash(git -c user.email=mariusjahnsen@gmail.com -c 'user.name=Marius Jahnsen' commit -m 'feat\\(dag-4\\): enrichment-script — Claude Sonnet 4.6 + web_search *)"
     ]
   }
 }
