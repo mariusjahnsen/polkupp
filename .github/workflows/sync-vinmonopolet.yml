@@ -1,0 +1,33 @@
+name: Daglig Vinmonopolet-sync
+
+on:
+  schedule:
+    # 06:00 UTC = 08:00 norsk sommertid, 07:00 vintertid
+    # Vinmonopolets master-data oppdateres ~05:45 CET, så vi treffer ferskt.
+    - cron: "0 6 * * *"
+  workflow_dispatch: # tillater manuell kjøring fra Actions-fanen
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installer dependencies
+        run: npm ci
+
+      - name: Kjør sync mot Vinmonopolet → Supabase
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          # Skriv minimal .env.local som scriptet leser fra
+          printf "VITE_SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\n" \
+            "$VITE_SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" > .env.local
+          node scripts/sync-vinmonopolet.mjs
