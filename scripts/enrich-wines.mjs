@@ -49,7 +49,18 @@ const args = Object.fromEntries(
 const LIMIT = args.limit ? parseInt(args.limit, 10) : 20;
 const WINE_ID = args["wine-id"] || null;
 const MAX_AGE_DAYS = args["max-age-days"] ? parseInt(args["max-age-days"], 10) : 30;
+
+// Modell: Sonnet 4.6 — sommelier-kvalitet på omtaler, korrekt norsk,
+// ~100 % JSON-parse-suksess. Testet Haiku 4.5 først (2026-05-03) men 50 %
+// parse-feilrate + skrivefeil + svakere omtaler. Sonnet koster bare ~$1/mnd
+// mer på Polkupps volum, så det er verdt det.
 const MODEL = "claude-sonnet-4-6";
+
+// Pris-filter: hopp over de billigste (lite engasjement) og dyreste (nerder
+// finner sin egen omtale). Polkupp er for "vanlige" forbrukere som vil ha
+// hjelp til å spotte gode tilbud i mellom-segmentet.
+const MIN_PRICE = 200;
+const MAX_PRICE = 1000;
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false },
@@ -163,6 +174,7 @@ async function enrichWine(wine) {
         cache_control: { type: "ephemeral" }, // 5-min cache
       },
     ],
+    // web_search_20260209 har dynamic filtering for Sonnet 4.6 (mer presist)
     tools: [{ type: "web_search_20260209", name: "web_search" }],
     messages: [{ role: "user", content: userPrompt }],
   });
@@ -213,16 +225,23 @@ async function findWinesToEnrich() {
 
   const cutoff = new Date(Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  // Først: viner i daily_drops uten review (eller med utdatert review)
+  // Først: viner i daily_drops uten review (eller med utdatert review).
+  // Pris-filteret kjøres i kode etter join siden Supabase ikke lett støtter
+  // filter på joined felt i samme query.
   const { data: drops } = await supabase
     .from("daily_drops")
     .select("wine_id, drop_date, pct_drop, wines(*)")
     .order("pct_drop", { ascending: false })
-    .limit(LIMIT);
+    .limit(LIMIT * 3); // hent flere så vi har nok etter pris-filter
 
-  if (drops && drops.length > 0) {
-    // Filtrer bort de som har fersk review
-    const ids = drops.map((d) => d.wine_id);
+  const dropsInRange = (drops ?? []).filter(
+    (d) =>
+      d.wines?.current_price >= MIN_PRICE &&
+      d.wines?.current_price <= MAX_PRICE
+  );
+
+  if (dropsInRange.length > 0) {
+    const ids = dropsInRange.map((d) => d.wine_id);
     const { data: existing } = await supabase
       .from("wine_reviews")
       .select("wine_id, generated_at")
@@ -230,18 +249,22 @@ async function findWinesToEnrich() {
       .gte("generated_at", cutoff);
 
     const recentlyReviewed = new Set((existing ?? []).map((r) => r.wine_id));
-    return drops
+    return dropsInRange
       .filter((d) => !recentlyReviewed.has(d.wine_id))
       .map((d) => d.wines)
-      .filter(Boolean);
+      .filter(Boolean)
+      .slice(0, LIMIT);
   }
 
-  // Ingen drops ennå — fall tilbake til de første N vinene uten review (for testing)
-  console.log("Ingen drops i daily_drops, henter et utvalg viner uten review for testing.");
+  // Ingen drops ennå — fall tilbake til viner i pris-spennet uten review (for testing)
+  console.log(
+    `Ingen drops i daily_drops, henter et utvalg viner i pris-spennet ${MIN_PRICE}-${MAX_PRICE} kr for testing.`
+  );
   const { data: wines } = await supabase
     .from("wines")
     .select("*")
-    .not("current_price", "is", null)
+    .gte("current_price", MIN_PRICE)
+    .lte("current_price", MAX_PRICE)
     .order("current_price", { ascending: false })
     .limit(LIMIT);
 
