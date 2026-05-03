@@ -97,15 +97,43 @@ async function main() {
   let drops = 0;
   let totalPages = null;
 
+  let throttleMs = 800; // adaptiv: økes ved 429, reduseres gradvis tilbake
+  let consecutiveOk = 0;
+
   while (page < MAX_PAGES) {
     const url = `${SEARCH}?q=:relevance&pageSize=24&currentPage=${page}`;
-    const res = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "Polkupp-sync/0.0.1" },
-    });
+    let res;
+    try {
+      res = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": "Polkupp-sync/0.0.1" },
+      });
+    } catch (e) {
+      console.warn(`Side ${page}: nettverksfeil ${e.message} — venter 5s og prøver igjen`);
+      await sleep(5000);
+      continue;
+    }
+
+    // Backoff ved rate limit eller server-feil
+    if (res.status === 429 || res.status >= 500) {
+      const retryAfter = parseInt(res.headers.get("retry-after") ?? "0", 10);
+      const wait = retryAfter > 0 ? retryAfter * 1000 : Math.min(throttleMs * 4, 60000);
+      console.warn(`Side ${page}: HTTP ${res.status} — venter ${wait}ms og prøver igjen`);
+      throttleMs = Math.min(throttleMs * 2, 5000);
+      consecutiveOk = 0;
+      await sleep(wait);
+      continue;
+    }
 
     if (!res.ok) {
-      console.error(`Side ${page}: HTTP ${res.status}`);
+      console.error(`Side ${page}: HTTP ${res.status} — stopper`);
       break;
+    }
+
+    consecutiveOk++;
+    // Etter 20 OK-svar på rad: reduser throttle gradvis tilbake mot 800ms
+    if (consecutiveOk >= 20 && throttleMs > 800) {
+      throttleMs = Math.max(800, Math.floor(throttleMs * 0.8));
+      consecutiveOk = 0;
     }
 
     const data = await res.json();
@@ -202,8 +230,8 @@ async function main() {
       );
     }
 
-    // Vær respektfull mot Vinmonopolet — 100ms mellom kall
-    await sleep(100);
+    // Adaptiv throttle (start 800ms, opp ved 429, gradvis ned ved suksess)
+    await sleep(throttleMs);
   }
 
   console.log(
