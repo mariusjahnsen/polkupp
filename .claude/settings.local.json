@@ -34,7 +34,13 @@
       "Bash(python3 -c ' *)",
       "Bash(curl -s \"https://www.vinmonopolet.no/vmpws/v2/vmp/products/search?pageSize=1\")",
       "Bash(curl -s 'https://www.vinmonopolet.no/vmpws/v2/vmp/products/search?pageSize=__TRACKED_VAR__')",
-      "Bash(node scripts/sync-vinmonopolet.mjs --max-pages=2 --dry-run)"
+      "Bash(node scripts/sync-vinmonopolet.mjs --max-pages=2 --dry-run)",
+      "Bash(git -c user.email=mariusjahnsen@gmail.com -c 'user.name=Marius Jahnsen' commit -m 'feat\\(dag-2\\): sync vmpws → Supabase pipeline *)",
+      "Bash(node scripts/sync-vinmonopolet.mjs)",
+      "Read(//tmp/**)",
+      "Bash(kill 15142)",
+      "Read(//private/tmp/**)",
+      "Bash(git -c user.email=mariusjahnsen@gmail.com -c 'user.name=Marius Jahnsen' commit -m 'feat\\(frontend\\): vis viner og drops fra Supabase *)"
     ]
   }
 }

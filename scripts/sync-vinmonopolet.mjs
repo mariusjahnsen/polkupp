@@ -119,72 +119,80 @@ async function main() {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    for (const p of products) {
-      if (!p.price?.value) continue; // hopp over uten pris
+    // Filtrer bort produkter uten pris
+    const valid = products.filter((p) => p.price?.value);
+    const wineRows = valid.map(toWine);
 
-      const wineRow = toWine(p);
-
-      if (DRY_RUN) {
-        totalProcessed++;
-        continue;
-      }
-
-      // Hent eksisterende rad (om noen) for å diffe pris
-      const { data: existing } = await supabase
-        .from("wines")
-        .select("id, current_price")
-        .eq("vinmonopolet_id", p.code)
-        .maybeSingle();
-
-      let wineId;
-
-      if (existing) {
-        wineId = existing.id;
-        const oldPrice = parseFloat(existing.current_price ?? 0);
-        const newPrice = parseFloat(wineRow.current_price);
-
-        if (oldPrice !== newPrice) priceChanges++;
-
-        // Prisnedsettelse?
-        if (oldPrice > 0 && newPrice < oldPrice) {
-          const pctDrop = ((oldPrice - newPrice) / oldPrice) * 100;
-          await supabase.from("daily_drops").upsert(
-            {
-              wine_id: wineId,
-              drop_date: today,
-              price_before: oldPrice,
-              price_after: newPrice,
-              pct_drop: parseFloat(pctDrop.toFixed(2)),
-            },
-            { onConflict: "wine_id,drop_date" }
-          );
-          drops++;
-        }
-
-        await supabase.from("wines").update(wineRow).eq("id", wineId);
-      } else {
-        const { data: inserted, error } = await supabase
-          .from("wines")
-          .insert(wineRow)
-          .select("id")
-          .single();
-        if (error) {
-          console.error(`Insert-feil for ${p.code}:`, error.message);
-          continue;
-        }
-        wineId = inserted.id;
-        newWines++;
-      }
-
-      // Append snapshot i price_history
-      await supabase.from("price_history").insert({
-        wine_id: wineId,
-        price: wineRow.current_price,
-      });
-
-      totalProcessed++;
+    if (DRY_RUN) {
+      totalProcessed += valid.length;
+      page++;
+      if (totalPages && page >= totalPages) break;
+      continue;
     }
 
+    // 1. Hent eksisterende rader for hele batchen i ÉTT kall
+    const { data: existingRows } = await supabase
+      .from("wines")
+      .select("id, vinmonopolet_id, current_price")
+      .in(
+        "vinmonopolet_id",
+        wineRows.map((w) => w.vinmonopolet_id)
+      );
+
+    const existingMap = new Map(
+      (existingRows ?? []).map((r) => [r.vinmonopolet_id, r])
+    );
+
+    // 2. Detekter prisendringer + drops
+    const dropRows = [];
+    for (const w of wineRows) {
+      const ex = existingMap.get(w.vinmonopolet_id);
+      if (!ex) {
+        newWines++;
+        continue;
+      }
+      const oldP = parseFloat(ex.current_price ?? 0);
+      const newP = parseFloat(w.current_price);
+      if (oldP !== newP) priceChanges++;
+      if (oldP > 0 && newP < oldP) {
+        dropRows.push({
+          wine_id: ex.id,
+          drop_date: today,
+          price_before: oldP,
+          price_after: newP,
+          pct_drop: parseFloat((((oldP - newP) / oldP) * 100).toFixed(2)),
+        });
+      }
+    }
+
+    // 3. Upsert hele batchen (én DB-rundtur)
+    const { data: upserted, error: upsertErr } = await supabase
+      .from("wines")
+      .upsert(wineRows, { onConflict: "vinmonopolet_id" })
+      .select("id, vinmonopolet_id, current_price");
+
+    if (upsertErr) {
+      console.error(`Upsert-feil side ${page}:`, upsertErr.message);
+      page++;
+      continue;
+    }
+
+    // 4. Append price_history for hele batchen (én rundtur)
+    const historyRows = upserted.map((u) => ({
+      wine_id: u.id,
+      price: u.current_price,
+    }));
+    await supabase.from("price_history").insert(historyRows);
+
+    // 5. Sett inn drops om noen (én rundtur)
+    if (dropRows.length > 0) {
+      await supabase
+        .from("daily_drops")
+        .upsert(dropRows, { onConflict: "wine_id,drop_date" });
+      drops += dropRows.length;
+    }
+
+    totalProcessed += valid.length;
     page++;
     if (totalPages && page >= totalPages) break;
 
