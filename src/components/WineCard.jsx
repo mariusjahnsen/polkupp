@@ -1,10 +1,29 @@
-export default function WineCard({ wine, drop, review }) {
+import { useState } from "react";
+import StoreList from "./StoreList.jsx";
+
+export default function WineCard({ wine, drop, review, location, onAskLocation }) {
+  const [showStores, setShowStores] = useState(false);
+
   const priceFmt = (p) =>
     new Intl.NumberFormat("no-NO", {
       style: "currency",
       currency: "NOK",
       minimumFractionDigits: p % 1 === 0 ? 0 : 2,
     }).format(p);
+
+  const onClickStores = () => {
+    if (!location) {
+      onAskLocation(() => setShowStores(true));
+      return;
+    }
+    setShowStores(s => !s);
+  };
+
+  const grapeStr = wine.grape_blend?.length
+    ? wine.grape_blend
+        .map(g => `${g.name}${g.percent ? ` ${g.percent}%` : ""}`)
+        .join(" · ")
+    : null;
 
   return (
     <article className="wine-card">
@@ -23,6 +42,14 @@ export default function WineCard({ wine, drop, review }) {
         <p className="wine-tags">
           {[wine.category, wine.country, wine.subcategory].filter(Boolean).join(" · ")}
         </p>
+
+        {grapeStr && <p className="wine-grapes">{grapeStr}</p>}
+
+        {wine.style_name && (
+          <p className="wine-style" title={wine.style_description}>
+            <em>{wine.style_name}</em>
+          </p>
+        )}
 
         {drop ? (
           <p className="price drop">
@@ -45,6 +72,18 @@ export default function WineCard({ wine, drop, review }) {
               </a>
             )}
           </p>
+        )}
+
+        <button
+          className="store-btn"
+          onClick={onClickStores}
+          aria-expanded={showStores}
+        >
+          {showStores ? "Skjul lager" : "📍 Lager i nærheten"}
+        </button>
+
+        {showStores && location && (
+          <StoreList wineCode={wine.vinmonopolet_id} location={location} />
         )}
       </div>
     </article>
