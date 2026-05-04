@@ -1,0 +1,31 @@
+name: Backfill HTML-data
+
+# Kjører hver halvtime, hver gang gjennom 200 viner som mangler html_fetched_at.
+# Stopper automatisk ved 429 (Cloudflare). Med 2s throttle = ~7 min per kjøring,
+# så 200 viner per halvtime = ~96 viner/time. 36k viner = ~16 dager til alt er gjort.
+# Kan trigges manuelt for raskere progresjon.
+
+on:
+  schedule:
+    - cron: "15,45 * * * *"   # 15 og 45 over hver time
+  workflow_dispatch:
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Backfill 200 viner per kjøring
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/backfill-html.mjs --max=200 --order=price

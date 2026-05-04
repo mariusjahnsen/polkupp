@@ -47,6 +47,13 @@ function extractYear(name) { const m = name?.match(/\b(19|20)\d{2}\b/); return m
 
 async function fetchProductFromHtml(code) {
   const res = await fetch(`${VMP_HOST}/p/${code}`, { headers: { "User-Agent": "Polkupp/0.1 (mariusjahnsen@gmail.com)", Accept: "text/html" } });
+  if (res.status === 429) {
+    // Cloudflare throttle — abort hele kjøringen, retry-after kan være timer
+    const retryAfter = res.headers.get("retry-after");
+    const e = new Error(`HTTP 429 (retry-after: ${retryAfter}s) — IP throttled, avbryter`);
+    e.fatal = true;
+    throw e;
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
   const scripts = [...html.matchAll(/<script type="application\/json">([\s\S]*?)<\/script>/g)];
@@ -155,8 +162,12 @@ async function main() {
     } catch (e) {
       fail++;
       console.warn(`  ⚠️  ${w.vinmonopolet_id} ${w.name?.slice(0,40)}: ${e.message}`);
+      if (e.fatal) {
+        console.error("\nFatalt: avbryter backfill pga IP-throttle. Vent på cool-down eller kjør fra annen IP.");
+        break;
+      }
     }
-    await sleep(400);  // 400ms throttle = ~150/min
+    await sleep(2000);  // 2s throttle — under tid for å være snill mot Cloudflare på vinmonopolet.no
   }
 
   console.log(`\nFerdig: ${ok} oppdatert, ${fail} feilet av ${targets.length} forsøk.`);
