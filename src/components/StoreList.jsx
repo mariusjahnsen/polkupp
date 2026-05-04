@@ -36,9 +36,14 @@ export default function StoreList({ wineCode, location }) {
 
     (async () => {
       try {
-        const url = `https://www.vinmonopolet.no/vmpws/v2/vmp/products/${wineCode}/stock?${locationParams(location)}&pageSize=10`;
+        // Bruker vår egen Vercel-proxy fordi Vinmonopolet ikke har CORS-headers.
+        const url = `/api/stock?code=${encodeURIComponent(wineCode)}&${locationParams(location)}`;
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          let msg = `HTTP ${res.status}`;
+          try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+          throw new Error(msg);
+        }
         const data = await res.json();
         const list = data.stores ?? [];
         if (cancelled) return;
