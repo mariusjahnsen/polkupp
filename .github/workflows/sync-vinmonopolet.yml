@@ -10,7 +10,7 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -22,12 +22,9 @@ jobs:
       - name: Installer dependencies
         run: npm ci
 
-      - name: Kjør sync mot Vinmonopolet → Supabase
+      - name: Inkrementell sync (changedSince + HTML-scrape per ID)
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          # Skriv minimal .env.local som scriptet leser fra
-          printf "VITE_SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\n" \
-            "$VITE_SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" > .env.local
-          node scripts/sync-vinmonopolet.mjs
+          VINMONOPOLET_API_KEY: ${{ secrets.VINMONOPOLET_API_KEY }}
+        run: node scripts/sync-incremental.mjs
