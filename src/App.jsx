@@ -226,6 +226,31 @@ export default function App() {
     setLocationState(null);
   };
 
+  const onClearCache = async () => {
+    if (!window.confirm("Tøm all lokal data og cache? Siden lastes på nytt. Lokasjon og varsel-abonnement nullstilles.")) return;
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith("polkupp_"))
+        .forEach(k => localStorage.removeItem(k));
+    } catch { /* ignore */ }
+    try {
+      Object.keys(sessionStorage)
+        .filter(k => k.startsWith("polkupp_"))
+        .forEach(k => sessionStorage.removeItem(k));
+    } catch { /* ignore */ }
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+    } catch { /* ignore */ }
+    window.location.reload();
+  };
+
   const totalPages = Math.ceil(totalCount / pageSize);
   const fmtNumber = useMemo(() => new Intl.NumberFormat("no-NO").format, []);
   const showingDrops = sortDef.source === "drops";
@@ -405,6 +430,10 @@ export default function App() {
           {location && (
             <> · <button className="btn-link inline" onClick={onClearLocation}>Glem lokasjon</button></>
           )}
+          {" · "}
+          <button className="btn-link inline tiny" onClick={onClearCache} title="Tøm all lokal data og cache">
+            Tøm cache
+          </button>
         </p>
         <p className="signature">Laget av Mise</p>
       </footer>

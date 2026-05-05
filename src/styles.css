@@ -383,6 +383,13 @@ footer {
   text-decoration: underline;
 }
 .btn-link.inline { display: inline; padding: 0; }
+.btn-link.tiny {
+  font-size: 0.75rem;
+  opacity: 0.55;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.btn-link.tiny:hover { opacity: 0.9; }
 
 /* ----- Wine-card ekstra felt ----- */
 .wine-grapes {
