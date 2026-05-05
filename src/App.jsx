@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase.js";
 import { getLocation, clearLocation, locationLabel } from "./lib/location.js";
 import WineCard from "./components/WineCard.jsx";
@@ -15,17 +15,30 @@ const CATEGORIES = [
   { code: "Øl", label: "Øl" },
 ];
 
+// Drops sorteres alltid med dato først (nyeste øverst). Sekundærsort styrer
+// rekkefølgen *innenfor* samme dato.
 const SORTS = [
   { code: "most_pct",   label: "Mest nedsatt %",   source: "drops",  column: "pct_drop",     asc: false },
   { code: "most_kr",    label: "Størst kr-rabatt", source: "drops",  column: "price_before", asc: false },
-  { code: "newest_drop",label: "Nyeste drop",      source: "drops",  column: "drop_date",    asc: false },
   { code: "newest",     label: "Nyeste innslag",   source: "wines",  column: "last_updated", asc: false },
   { code: "price_lo",   label: "Pris lavest",      source: "wines",  column: "current_price",asc: true  },
   { code: "price_hi",   label: "Pris høyest",      source: "wines",  column: "current_price",asc: false },
 ];
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
+const DEFAULT_PAGE_SIZE = 20;
 const DROP_WINDOW_DAYS = 7;
+
+function formatDropDate(dateStr) {
+  if (!dateStr) return "";
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(dateStr + "T00:00:00");
+  const diffDays = Math.round((today - target) / (24 * 3600 * 1000));
+  if (diffDays === 0) return "I dag";
+  if (diffDays === 1) return "I går";
+  if (diffDays === 2) return "I forgårs";
+  return target.toLocaleDateString("nb-NO", { weekday: "long", day: "numeric", month: "long" });
+}
 
 const EMPTY_FILTERS = {
   country: null, grape: null, style: null,
@@ -45,6 +58,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -96,21 +110,34 @@ export default function App() {
             .select("*, wines!inner(*)", { count: "exact" })
             .gte("drop_date", sinceDate);
           q = applyWineFilters(q, "wines.");
+          // Dato alltid primær — nyeste drops øverst, så sekundærsortering innen dato
           q = q
+            .order("drop_date", { ascending: false })
             .order(sortDef.column, { ascending: sortDef.asc })
-            .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+            .range(page * pageSize, page * pageSize + pageSize - 1);
 
           const { data, count, error: err } = await q;
           if (cancelled) return;
           if (err) throw err;
 
           let rows = (data ?? []).map(d => ({ ...d.wines, _drop: d }));
+          // "Størst kr-rabatt" er ikke en DB-kolonne — sorter innen hver dato-gruppe
           if (sort === "most_kr") {
-            rows = [...rows].sort(
-              (a, b) =>
-                (b._drop.price_before - b._drop.price_after) -
-                (a._drop.price_before - a._drop.price_after)
-            );
+            const groups = new Map();
+            for (const r of rows) {
+              const k = r._drop.drop_date;
+              if (!groups.has(k)) groups.set(k, []);
+              groups.get(k).push(r);
+            }
+            rows = [];
+            for (const [, group] of groups) {
+              group.sort(
+                (a, b) =>
+                  (b._drop.price_before - b._drop.price_after) -
+                  (a._drop.price_before - a._drop.price_after)
+              );
+              rows.push(...group);
+            }
           }
           setWines(rows);
           setTotalCount(count ?? 0);
@@ -123,7 +150,7 @@ export default function App() {
           q = applyWineFilters(q);
           q = q
             .order(sortDef.column, { ascending: sortDef.asc, nullsFirst: false })
-            .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+            .range(page * pageSize, page * pageSize + pageSize - 1);
 
           const { data, count, error: err } = await q;
           if (cancelled) return;
@@ -198,10 +225,24 @@ export default function App() {
     setLocationState(null);
   };
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const totalPages = Math.ceil(totalCount / pageSize);
   const fmtNumber = useMemo(() => new Intl.NumberFormat("no-NO").format, []);
   const showingDrops = sortDef.source === "drops";
   const noDropsAtAll = hasAnyDrops === false;
+
+  // Når vi viser drops, grupper sortert liste etter drop_date for å rendre
+  // dato-headere mellom grupper. Wines-view har ingen gruppering.
+  const dropGroups = useMemo(() => {
+    if (!showingDrops) return null;
+    const groups = [];
+    for (const w of wines) {
+      const date = w._drop?.drop_date;
+      const last = groups[groups.length - 1];
+      if (!last || last.date !== date) groups.push({ date, wines: [w] });
+      else last.wines.push(w);
+    }
+    return groups;
+  }, [showingDrops, wines]);
 
   return (
     <main>
@@ -281,30 +322,60 @@ export default function App() {
 
         {wines.length > 0 && (
           <>
-            <div className="grid">
-              {wines.map(w => (
-                <WineCard
-                  key={w.id}
-                  wine={w}
-                  drop={dropsByWine[w.id]}
-                  review={reviewsByWine[w.id]}
-                  location={location}
-                  onAskLocation={askLocation}
-                />
-              ))}
-            </div>
-
-            {totalPages > 1 && (
-              <div className="pagination">
-                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
-                  ← Forrige
-                </button>
-                <span>Side {page + 1} av {fmtNumber(totalPages)}</span>
-                <button onClick={() => setPage(p => p + 1)} disabled={page + 1 >= totalPages}>
-                  Neste →
-                </button>
+            {showingDrops && dropGroups ? (
+              dropGroups.map(g => (
+                <Fragment key={g.date}>
+                  <h3 className="date-header">{formatDropDate(g.date)}</h3>
+                  <div className="grid">
+                    {g.wines.map(w => (
+                      <WineCard
+                        key={w.id}
+                        wine={w}
+                        drop={dropsByWine[w.id]}
+                        review={reviewsByWine[w.id]}
+                        location={location}
+                        onAskLocation={askLocation}
+                      />
+                    ))}
+                  </div>
+                </Fragment>
+              ))
+            ) : (
+              <div className="grid">
+                {wines.map(w => (
+                  <WineCard
+                    key={w.id}
+                    wine={w}
+                    drop={dropsByWine[w.id]}
+                    review={reviewsByWine[w.id]}
+                    location={location}
+                    onAskLocation={askLocation}
+                  />
+                ))}
               </div>
             )}
+
+            <div className="pagination">
+              <div className="page-size">
+                <label>
+                  Per side:&nbsp;
+                  <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(0); }}>
+                    {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+              </div>
+              {totalPages > 1 && (
+                <div className="page-nav">
+                  <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+                    ← Forrige
+                  </button>
+                  <span>Side {page + 1} av {fmtNumber(totalPages)}</span>
+                  <button onClick={() => setPage(p => p + 1)} disabled={page + 1 >= totalPages}>
+                    Neste →
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         )}
       </section>

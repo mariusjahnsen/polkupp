@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#7a1a1a"/>
+  <!-- Vinflaske med drop -->
+  <path d="M27 12h10v6c0 1 .8 2 2 4 2 3 3 6 3 9v23a4 4 0 0 1-4 4H26a4 4 0 0 1-4-4V31c0-3 1-6 3-9 1.2-2 2-3 2-4v-6z"
+        fill="#faf7f2" opacity="0.95"/>
+  <!-- Korken -->
+  <rect x="28" y="9" width="8" height="5" rx="1" fill="#3a2418"/>
+  <!-- Drop -->
+  <path d="M32 38c-2.5 0-4.5 2-4.5 4.5C27.5 45.5 30 48 32 48s4.5-2.5 4.5-5.5C36.5 40 34.5 38 32 38z"
+        fill="#d97a3a"/>
+</svg>
