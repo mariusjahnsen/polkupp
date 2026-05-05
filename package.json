@@ -12,7 +12,12 @@
     "@anthropic-ai/sdk": "^0.92.0",
     "@supabase/supabase-js": "^2.105.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "web-push": "^3.6.7",
+    "workbox-expiration": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1",
+    "workbox-strategies": "^7.4.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",

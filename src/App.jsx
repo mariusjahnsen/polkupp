@@ -4,6 +4,7 @@ import { getLocation, clearLocation, locationLabel } from "./lib/location.js";
 import WineCard from "./components/WineCard.jsx";
 import FilterPanel from "./components/FilterPanel.jsx";
 import LocationModal from "./components/LocationModal.jsx";
+import NotificationButton from "./components/NotificationButton.jsx";
 
 const CATEGORIES = [
   { code: null, label: "Alle" },
@@ -252,9 +253,12 @@ export default function App() {
             <h1>Polkupp</h1>
             <p className="tagline">Vinmonopolets prisnedsettelser, daglig.</p>
           </div>
-          <button className="btn-link location-btn" onClick={() => setShowLocationModal(true)}>
-            📍 {locationLabel(location)}
-          </button>
+          <div className="header-actions">
+            <NotificationButton />
+            <button className="btn-link location-btn" onClick={() => setShowLocationModal(true)}>
+              📍 {locationLabel(location)}
+            </button>
+          </div>
         </div>
       </header>
 

@@ -27,4 +27,6 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           VINMONOPOLET_API_KEY: ${{ secrets.VINMONOPOLET_API_KEY }}
+          SITE_URL: https://polkupp.vercel.app
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: node scripts/sync-incremental.mjs

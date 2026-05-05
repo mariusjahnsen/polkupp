@@ -306,7 +306,14 @@ footer {
   gap: 1rem;
   flex-wrap: wrap;
 }
-.location-btn {
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.location-btn,
+.notif-btn {
   white-space: nowrap;
   font-size: 0.9rem;
   padding: 0.5rem 0.9rem;
@@ -316,8 +323,21 @@ footer {
   color: var(--fg);
   cursor: pointer;
   font-family: inherit;
+  text-decoration: none;
 }
-.location-btn:hover { border-color: var(--accent); }
+.location-btn:hover:not(:disabled),
+.notif-btn:hover:not(:disabled) { border-color: var(--accent); }
+.notif-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+.notif-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.notif-error {
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-left: 0.5rem;
+}
 
 /* ----- Generelle knapper ----- */
 .btn-primary {

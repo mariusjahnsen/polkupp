@@ -320,6 +320,41 @@ async function main() {
       notes: failed > 0 ? `${failed} produkter feilet under HTML-fetch` : null,
     }).eq("id", 1);
   }
+
+  // 7. Trigge push-varsel hvis det er drops å varsle om
+  if (drops > 0 && !DRY_RUN && env.SITE_URL && env.CRON_SECRET) {
+    try {
+      // Finn dagens største drop til å vise i body
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: topDropRow } = await supabase
+        .from("daily_drops")
+        .select("price_before, price_after, pct_drop, wines!inner(name)")
+        .eq("drop_date", today)
+        .order("pct_drop", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const topDrop = topDropRow ? {
+        name: topDropRow.wines.name,
+        price_before: topDropRow.price_before,
+        price_after: topDropRow.price_after,
+        pct_drop: topDropRow.pct_drop,
+      } : null;
+
+      const res = await fetch(`${env.SITE_URL}/api/send-push`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.CRON_SECRET}`,
+        },
+        body: JSON.stringify({ dropsCount: drops, topDrop }),
+      });
+      const result = await res.json().catch(() => ({}));
+      console.log(`Push-varsel: sendt=${result.sent ?? 0}, fjernet=${result.removed ?? 0}, feilet=${result.failed ?? 0}`);
+    } catch (e) {
+      console.warn(`Push-trigger feilet (ignorerer): ${e.message}`);
+    }
+  }
 }
 
 main().catch(e => { console.error("Fatal:", e); process.exit(1); });

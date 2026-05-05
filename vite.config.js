@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.js",
       registerType: "autoUpdate",
       injectRegister: "auto",
       includeAssets: ["favicon.svg", "favicon.png", "apple-touch-icon.png"],
@@ -28,29 +31,8 @@ export default defineConfig({
           { src: "/favicon.svg", sizes: "any", type: "image/svg+xml" },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest}"],
-        runtimeCaching: [
-          {
-            // Vinmonopolet-bilder via deres CDN — cache lenge
-            urlPattern: /^https:\/\/bilder\.vinmonopolet\.no\/.*\.(jpg|jpeg|png|webp)$/,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "vmp-product-images",
-              expiration: { maxEntries: 500, maxAgeSeconds: 30 * 24 * 3600 },
-            },
-          },
-          {
-            // Vår egen /api/stock — kort cache, network-first
-            urlPattern: /\/api\/stock/,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "stock-api",
-              expiration: { maxEntries: 100, maxAgeSeconds: 600 },
-              networkTimeoutSeconds: 5,
-            },
-          },
-        ],
       },
     }),
   ],
