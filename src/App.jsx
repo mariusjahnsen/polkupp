@@ -30,6 +30,7 @@ const DROP_WINDOW_DAYS = 7;
 const EMPTY_FILTERS = {
   country: null, grape: null, style: null,
   priceMin: null, priceMax: null, ecoOnly: false, foodPairing: null,
+  includeOrderOnly: false,  // Bestillingsvarer skjules som standard — sjelden i butikk
 };
 
 export default function App() {
@@ -85,6 +86,7 @@ export default function App() {
           if (filters.priceMax != null) q = q.lte(c("current_price"), filters.priceMax);
           if (filters.ecoOnly) q = q.eq(c("eco"), true);
           if (filters.grape) q = q.contains(c("grape_blend"), [{ name: filters.grape }]);
+          if (!filters.includeOrderOnly) q = q.neq(c("product_selection"), "Bestillingsutvalget");
           return q;
         };
 
@@ -271,6 +273,9 @@ export default function App() {
                 ? "Ingen drops registrert ennå. Bytt sortering for å bla gjennom hele utvalget."
                 : "Ingen drops matcher dine filtre."
               : "Ingen treff. Prøv å nullstille filtrene."}
+            {!filters.includeOrderOnly && (
+              <> Bestillingsvarer er skjult — slå dem på i «Flere filtre» for å se hele utvalget.</>
+            )}
           </p>
         )}
 

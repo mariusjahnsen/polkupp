@@ -101,6 +101,17 @@ export default function FilterPanel({ filters, onChange, onReset }) {
             Kun økologisk
           </span>
         </label>
+
+        <label className="full">
+          <span>
+            <input
+              type="checkbox"
+              checked={!!filters.includeOrderOnly}
+              onChange={e => update({ includeOrderOnly: e.target.checked })}
+            />
+            Vis bestillingsvarer (sjelden i butikk)
+          </span>
+        </label>
       </div>
 
       {hasAny && (
