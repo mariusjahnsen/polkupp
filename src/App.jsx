@@ -249,10 +249,24 @@ export default function App() {
     <main>
       <header>
         <div className="header-top">
-          <div>
+          <a
+            href="/"
+            className="logo-link"
+            onClick={(e) => {
+              if (window.location.pathname === "/") {
+                e.preventDefault();
+                setCategory(null);
+                setSort("most_pct");
+                setSearch("");
+                setFilters(EMPTY_FILTERS);
+                setPage(0);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }
+            }}
+          >
             <h1>Polkupp</h1>
             <p className="tagline">Vinmonopolets prisnedsettelser, daglig.</p>
-          </div>
+          </a>
           <div className="header-actions">
             <NotificationButton />
             <button className="btn-link location-btn" onClick={() => setShowLocationModal(true)}>
@@ -392,6 +406,7 @@ export default function App() {
             <> · <button className="btn-link inline" onClick={onClearLocation}>Glem lokasjon</button></>
           )}
         </p>
+        <p className="signature">Laget av Mise</p>
       </footer>
 
       {showLocationModal && (

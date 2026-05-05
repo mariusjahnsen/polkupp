@@ -312,6 +312,24 @@ footer {
   align-items: center;
   flex-wrap: wrap;
 }
+
+.logo-link {
+  display: inline-block;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.logo-link:hover { opacity: 0.85; text-decoration: none; }
+.logo-link h1 { margin: 0; }
+.logo-link .tagline { margin: 0.25rem 0 0; }
+
+.signature {
+  margin-top: 1.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  font-style: italic;
+}
 .location-btn,
 .notif-btn {
   white-space: nowrap;
