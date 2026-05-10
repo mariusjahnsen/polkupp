@@ -7,7 +7,9 @@ function cacheKey(wineCode, location) {
 }
 
 function locationParams(location) {
-  if (location.type === "gps") return `latitude=${location.lat}&longitude=${location.lon}`;
+  // /api/stock leser req.query.lat/lon (kort form), ikke latitude/longitude.
+  // API-en oversetter selv til Vinmonopolets latitude/longitude-konvensjon.
+  if (location.type === "gps") return `lat=${location.lat}&lon=${location.lon}`;
   return `location=${encodeURIComponent(location.postnr)}`;
 }
 
