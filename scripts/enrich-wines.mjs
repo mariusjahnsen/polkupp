@@ -61,6 +61,26 @@ const MAX_AGE_DAYS = args["max-age-days"] ? parseInt(args["max-age-days"], 10) :
 // mer på Polkupps volum, så det er verdt det.
 const MODEL = "claude-sonnet-4-6";
 
+// USD per 1M tokens (eller per 1k searches) for Sonnet 4.6.
+// Brukt til å beregne estimert kostnad per kjøring og logge i enrichment_runs.
+const PRICES_USD = {
+  input:          3.00,    // ferske input-tokens
+  output:        15.00,
+  cache_write_5m: 3.75,    // 1.25× input
+  cache_read:     0.30,    // 0.1× input
+  web_search_per_1k: 10.00,
+};
+
+function calculateCostUsd({ input, output, cacheRead, cacheWrite, searches }) {
+  return (
+    (input      / 1_000_000) * PRICES_USD.input +
+    (output     / 1_000_000) * PRICES_USD.output +
+    (cacheWrite / 1_000_000) * PRICES_USD.cache_write_5m +
+    (cacheRead  / 1_000_000) * PRICES_USD.cache_read +
+    (searches   / 1_000)     * PRICES_USD.web_search_per_1k
+  );
+}
+
 // Pris-filter: hopp over de billigste (lite engasjement) og dyreste (nerder
 // finner sin egen omtale). Polkupp er for "vanlige" forbrukere som vil ha
 // hjelp til å spotte gode tilbud i mellom-segmentet.
@@ -188,37 +208,47 @@ async function enrichWine(wine) {
     // Server-side tool hit iteration cap — resume.
     // For Polkupp's small per-wine queries this is unlikely; logging in case.
     console.warn(`Pause_turn for ${wine.name} — implementer resume hvis dette kommer ofte`);
-    return null;
+    return { usage: response.usage, webSearches: 0, parsed: null };
   }
 
   // Plukk siste text-block (selve JSON-svaret kommer etter web_search-rundene)
   const textBlocks = response.content.filter((b) => b.type === "text");
   const finalText = textBlocks.map((b) => b.text).join("").trim();
 
+  // Tell hvor mange ganger modellen kalte web_search — Anthropic fakturerer
+  // per søk, ikke per token. Hver search blir en server_tool_use-blokk.
+  const webSearches = response.content.filter(
+    (b) => b.type === "server_tool_use" && b.name === "web_search"
+  ).length;
+
   // Robust JSON-ekstraksjon: finner ytterste { ... } selv om modellen rammer
   // svaret med forklarende tekst eller ```-fences.
   const parsed = extractJson(finalText);
   if (!parsed) {
     console.error(`JSON parse failed for ${wine.name}:`, finalText.slice(0, 200));
-    return null;
+    return { usage: response.usage, webSearches, parsed: null };
   }
 
   // Cache-debugging
   const u = response.usage;
   console.log(
-    `  cache: read=${u.cache_read_input_tokens ?? 0}, write=${u.cache_creation_input_tokens ?? 0}, fresh=${u.input_tokens}`
+    `  cache: read=${u.cache_read_input_tokens ?? 0}, write=${u.cache_creation_input_tokens ?? 0}, fresh=${u.input_tokens}, searches=${webSearches}`
   );
 
   return {
-    vivino_rating:
-      typeof parsed.vivino_rating === "number" &&
-      parsed.vivino_rating >= 0 &&
-      parsed.vivino_rating <= 5
-        ? parsed.vivino_rating
-        : null,
-    vivino_url: typeof parsed.vivino_url === "string" ? parsed.vivino_url : null,
-    summary: typeof parsed.summary === "string" ? parsed.summary : null,
-    sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+    parsed: {
+      vivino_rating:
+        typeof parsed.vivino_rating === "number" &&
+        parsed.vivino_rating >= 0 &&
+        parsed.vivino_rating <= 5
+          ? parsed.vivino_rating
+          : null,
+      vivino_url: typeof parsed.vivino_url === "string" ? parsed.vivino_url : null,
+      summary: typeof parsed.summary === "string" ? parsed.summary : null,
+      sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+    },
+    usage: response.usage,
+    webSearches,
   };
 }
 
@@ -281,12 +311,21 @@ async function findWinesToEnrich() {
 }
 
 async function main() {
-  console.log(`Polkupp enrichment — ${new Date().toISOString()}`);
+  const startedAt = new Date().toISOString();
+  console.log(`Polkupp enrichment — ${startedAt}`);
   console.log(`Modell: ${MODEL}, limit: ${LIMIT}\n`);
 
   const wines = await findWinesToEnrich();
   if (wines.length === 0) {
     console.log("Ingen viner som trenger enrichment.");
+    // Logg likevel en tom kjøring så ukentlig rapport kan vise "0 dager uten drops"
+    await supabase.from("enrichment_runs").insert({
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      status: "success",
+      model_version: MODEL,
+      notes: "Ingen viner trengte enrichment",
+    });
     return;
   }
 
@@ -294,15 +333,26 @@ async function main() {
 
   let succeeded = 0;
   let failed = 0;
+  const totals = {
+    input: 0, output: 0, cacheRead: 0, cacheWrite: 0, searches: 0,
+  };
 
   for (const wine of wines) {
     console.log(`→ ${wine.name}${wine.year ? ` (${wine.year})` : ""}`);
     try {
-      const enriched = await enrichWine(wine);
-      if (!enriched) {
+      const result = await enrichWine(wine);
+      if (result?.usage) {
+        totals.input      += result.usage.input_tokens ?? 0;
+        totals.output     += result.usage.output_tokens ?? 0;
+        totals.cacheRead  += result.usage.cache_read_input_tokens ?? 0;
+        totals.cacheWrite += result.usage.cache_creation_input_tokens ?? 0;
+        totals.searches   += result.webSearches ?? 0;
+      }
+      if (!result?.parsed) {
         failed++;
         continue;
       }
+      const enriched = result.parsed;
 
       const { error } = await supabase.from("wine_reviews").insert({
         wine_id: wine.id,
@@ -327,7 +377,31 @@ async function main() {
     }
   }
 
+  const cost = calculateCostUsd(totals);
+  const status = failed === 0 ? "success" : (succeeded > 0 ? "partial" : "failed");
+
   console.log(`\nFerdig. ${succeeded} berikede, ${failed} feilet.`);
+  console.log(`Tokens: input=${totals.input}, output=${totals.output}, cache_read=${totals.cacheRead}, cache_write=${totals.cacheWrite}`);
+  console.log(`Web-søk: ${totals.searches}`);
+  console.log(`Estimert kostnad: $${cost.toFixed(4)}`);
+
+  // Logg kjøringen for ukentlig rapport
+  const { error: runErr } = await supabase.from("enrichment_runs").insert({
+    started_at: startedAt,
+    completed_at: new Date().toISOString(),
+    status,
+    model_version: MODEL,
+    wines_processed: wines.length,
+    succeeded,
+    failed,
+    input_tokens: totals.input,
+    output_tokens: totals.output,
+    cache_read_tokens: totals.cacheRead,
+    cache_write_tokens: totals.cacheWrite,
+    web_searches: totals.searches,
+    estimated_cost_usd: cost.toFixed(4),
+  });
+  if (runErr) console.warn(`Kunne ikke logge kjøring: ${runErr.message}`);
 }
 
 main().catch((e) => {
