@@ -25,32 +25,24 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const { dropsCount = 0, topDrop, customTitle, customBody, customTag, url } = req.body ?? {};
-
-  let title, body, tag;
-  if (customTitle || customBody) {
-    // Custom-melding (brukes av weekly-cost-report o.l.)
-    title = customTitle ?? "Polkupp";
-    body = customBody ?? "";
-    tag = customTag ?? "polkupp-info";
-  } else if (dropsCount > 0) {
-    // Daglig drops-varsel (default)
-    title = dropsCount === 1
-      ? "Ny pris-drop på Polkupp"
-      : `${dropsCount} nye pris-drops på Polkupp`;
-    body = topDrop
-      ? `${topDrop.name}: ${topDrop.price_before} → ${topDrop.price_after} kr (-${topDrop.pct_drop}%)`
-      : "Sjekk forsiden for å se hva som ble billigere i dag.";
-    tag = "polkupp-daily-drops";
-  } else {
-    return res.status(200).json({ ok: true, sent: 0, reason: "nothing to notify" });
+  const { dropsCount = 0, topDrop } = req.body ?? {};
+  if (!dropsCount || dropsCount < 1) {
+    return res.status(200).json({ ok: true, sent: 0, reason: "no drops to notify" });
   }
+
+  const title = dropsCount === 1
+    ? "Ny pris-drop på Polkupp"
+    : `${dropsCount} nye pris-drops på Polkupp`;
+
+  const body = topDrop
+    ? `${topDrop.name}: ${topDrop.price_before} → ${topDrop.price_after} kr (-${topDrop.pct_drop}%)`
+    : "Sjekk forsiden for å se hva som ble billigere i dag.";
 
   const payload = JSON.stringify({
     title,
     body,
-    url: url ?? "/",
-    tag,
+    url: "/",
+    tag: "polkupp-daily-drops",
   });
 
   // Hent alle abonnementer

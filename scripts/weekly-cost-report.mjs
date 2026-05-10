@@ -2,21 +2,21 @@
 /**
  * Polkupp — ukentlig kostnadsrapport
  *
- * Aggregerer alle enrichment_runs siste 7 dager og leverer rapporten:
- *   1. Som GitHub Actions step summary (synlig i Actions-fanen)
- *   2. Som push-varsel via /api/send-push (hvis SITE_URL + CRON_SECRET er satt)
+ * Aggregerer alle enrichment_runs siste 7 dager og leverer rapporten som:
+ *   1. GitHub Actions step summary (synlig i Actions-fanen)
+ *   2. Markdown-fil i REPORT_OUTPUT_PATH (default /tmp/polkupp-weekly-report.md)
+ *      som workflow så kan poste som GitHub Issue-kommentar.
  *
  * Bruk:
- *   node scripts/weekly-cost-report.mjs           # full rapport, send push
- *   node scripts/weekly-cost-report.mjs --no-push # bare logg, ikke send
+ *   node scripts/weekly-cost-report.mjs                     # default
+ *   REPORT_OUTPUT_PATH=./report.md node scripts/...mjs      # custom path
  *
  * Krever:
  *   VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
- *   SITE_URL, CRON_SECRET (for push-leveranse)
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync, existsSync, appendFileSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync, writeFileSync } from "node:fs";
 
 function loadEnv() {
   const fromFile = existsSync(".env.local")
@@ -37,14 +37,7 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
   process.exit(1);
 }
 
-const args = Object.fromEntries(
-  process.argv.slice(2).map(a => {
-    const [k, v] = a.replace(/^--/, "").split("=");
-    return [k, v ?? true];
-  })
-);
-const NO_PUSH = !!args["no-push"];
-
+const REPORT_OUTPUT_PATH = env.REPORT_OUTPUT_PATH || "/tmp/polkupp-weekly-report.md";
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
 async function main() {
@@ -75,55 +68,35 @@ async function main() {
   console.log(`Snitt per vin: $${costPerWine.toFixed(4)}`);
   console.log(`Estimert månedsrate: $${(totalCost * 30 / 7).toFixed(2)}`);
 
-  // GitHub Actions step summary
+  // Bygg Markdown-rapport (delt mellom step summary og issue-kommentar)
+  const md = [
+    `## Polkupp ukentlig kostnadsrapport`,
+    `Periode: siste 7 dager (siden ${since.slice(0, 10)})`,
+    ``,
+    `| Metrikk | Verdi |`,
+    `| --- | ---: |`,
+    `| Kjøringer | ${totalRuns} |`,
+    `| Vellykkede | ${successfulRuns} |`,
+    `| Partial / failed | ${partialRuns} / ${failedRuns} |`,
+    `| Viner berikede | ${totalWines} |`,
+    `| Web-søk totalt | ${totalSearches} |`,
+    `| **Estimert kostnad** | **$${totalCost.toFixed(2)}** |`,
+    `| Snitt per vin | $${costPerWine.toFixed(4)} |`,
+    `| Månedsrate (estimert) | $${(totalCost * 30 / 7).toFixed(2)} |`,
+    ``,
+    `_Generert ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC_`,
+    ``,
+  ].join("\n");
+
+  // GitHub Actions step summary (synlig i Actions-fanen)
   if (env.GITHUB_STEP_SUMMARY) {
-    const md = [
-      `## Polkupp ukentlig kostnadsrapport`,
-      `Periode: siste 7 dager (siden ${since.slice(0, 10)})`,
-      ``,
-      `| Metrikk | Verdi |`,
-      `| --- | ---: |`,
-      `| Kjøringer | ${totalRuns} |`,
-      `| Vellykkede | ${successfulRuns} |`,
-      `| Partial / failed | ${partialRuns} / ${failedRuns} |`,
-      `| Viner berikede | ${totalWines} |`,
-      `| Web-søk totalt | ${totalSearches} |`,
-      `| **Estimert kostnad** | **$${totalCost.toFixed(2)}** |`,
-      `| Snitt per vin | $${costPerWine.toFixed(4)} |`,
-      `| Månedsrate (estimert) | $${(totalCost * 30 / 7).toFixed(2)} |`,
-      ``,
-    ].join("\n");
     appendFileSync(env.GITHUB_STEP_SUMMARY, md);
     console.log("Skrev rapport til GITHUB_STEP_SUMMARY.");
   }
 
-  // Push-varsel
-  if (!NO_PUSH && env.SITE_URL && env.CRON_SECRET) {
-    const body = totalRuns === 0
-      ? "Ingen enrichment-kjøringer siste uke."
-      : `${totalWines} viner berikede, $${totalCost.toFixed(2)} (snitt $${costPerWine.toFixed(3)}/vin)`;
-    try {
-      const res = await fetch(`${env.SITE_URL}/api/send-push`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${env.CRON_SECRET}`,
-        },
-        body: JSON.stringify({
-          customTitle: "Polkupp ukerapport",
-          customBody: body,
-          customTag: "polkupp-weekly-report",
-          url: "/",
-        }),
-      });
-      const result = await res.json().catch(() => ({}));
-      console.log(`Push: sendt=${result.sent ?? 0}, fjernet=${result.removed ?? 0}, feilet=${result.failed ?? 0}`);
-    } catch (e) {
-      console.warn(`Push-varsel feilet: ${e.message}`);
-    }
-  } else if (NO_PUSH) {
-    console.log("--no-push satt, hopper over push-varsel.");
-  }
+  // Skriv til fil — workflow leser denne og poster som issue-kommentar
+  writeFileSync(REPORT_OUTPUT_PATH, md);
+  console.log(`Skrev rapport til ${REPORT_OUTPUT_PATH}.`);
 }
 
 main().catch(e => { console.error("Fatal:", e); process.exit(1); });
