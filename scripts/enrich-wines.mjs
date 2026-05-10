@@ -20,16 +20,21 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
-// --- Konfig fra .env.local ---
-const env = Object.fromEntries(
-  readFileSync(".env.local", "utf8")
-    .split("\n")
-    .filter((l) => l && !l.startsWith("#"))
-    .map((l) => l.split("=").map((s) => s.trim()))
-    .map(([k, ...rest]) => [k, rest.join("=")])
-);
+// --- Konfig fra .env.local + process.env (CI-vennlig) ---
+function loadEnv() {
+  const fromFile = existsSync(".env.local")
+    ? Object.fromEntries(
+        readFileSync(".env.local", "utf8")
+          .split("\n").filter((l) => l && !l.startsWith("#"))
+          .map((l) => l.split("=").map((s) => s.trim()))
+          .map(([k, ...rest]) => [k, rest.join("=")])
+      )
+    : {};
+  return { ...fromFile, ...process.env };
+}
+const env = loadEnv();
 
 const SUPABASE_URL = env.VITE_SUPABASE_URL;
 const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -227,10 +232,14 @@ async function findWinesToEnrich() {
 
   // Først: viner i daily_drops uten review (eller med utdatert review).
   // Pris-filteret kjøres i kode etter join siden Supabase ikke lett støtter
-  // filter på joined felt i samme query.
+  // filter på joined felt i samme query. Drops eldre enn 7 dager hoppes over —
+  // ellers kan gamle høye drops blokkere ferske dagsdrops fra enrichment.
+  const dropSinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    .toISOString().slice(0, 10);
   const { data: drops } = await supabase
     .from("daily_drops")
     .select("wine_id, drop_date, pct_drop, wines(*)")
+    .gte("drop_date", dropSinceDate)
     .order("pct_drop", { ascending: false })
     .limit(LIMIT * 3); // hent flere så vi har nok etter pris-filter
 
