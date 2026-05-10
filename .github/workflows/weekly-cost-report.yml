@@ -1,0 +1,32 @@
+name: Ukentlig kostnadsrapport
+
+# Kjører hver søndag 17:00 UTC = 18:00 norsk vintertid / 19:00 sommertid.
+# Henter alle enrichment_runs siste 7 dager, oppsummerer kostnad,
+# leverer som GH Actions step summary + push-varsel til abonnerte enheter.
+
+on:
+  schedule:
+    - cron: "0 17 * * 0"
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Generer ukerapport
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SITE_URL: https://polkupp.vercel.app
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: node scripts/weekly-cost-report.mjs
