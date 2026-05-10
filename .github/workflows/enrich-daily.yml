@@ -1,12 +1,13 @@
 name: Daglig enrichment
 
-# Kjører 06:30 UTC = 30 min etter daglig sync. Da er ferske drops registrert
+# Kjører 05:43 UTC = 30 min etter daglig sync. Da er ferske drops registrert
 # i daily_drops, og enrich-skriptet plukker opp top-N etter pct_drop.
+# Off-peak-minutt unngår GH Actions schedule-forsinkelse.
 # Default 10 viner/dag = ~$3-6/mnd estimert. Justerbar via workflow_dispatch.
 
 on:
   schedule:
-    - cron: "30 6 * * *"
+    - cron: "43 5 * * *"
   workflow_dispatch:
     inputs:
       limit:

@@ -1,13 +1,14 @@
 name: Ukentlig kostnadsrapport
 
-# Kjører hver søndag 17:00 UTC = 18:00 norsk vintertid / 19:00 sommertid.
+# Kjører hver søndag 17:13 UTC = 18:13 norsk vintertid / 19:13 sommertid.
+# Off-peak-minutt unngår GH Actions schedule-forsinkelse.
 # Henter alle enrichment_runs siste 7 dager, oppsummerer kostnad, og leverer
 # rapporten som (a) GH Actions step summary og (b) kommentar på et fast
 # GitHub Issue. GitHub mailer Marius automatisk fordi han er repo-eier.
 
 on:
   schedule:
-    - cron: "0 17 * * 0"
+    - cron: "13 17 * * 0"
   workflow_dispatch:
 
 permissions:

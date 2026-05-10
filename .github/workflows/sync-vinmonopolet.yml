@@ -2,9 +2,12 @@ name: Daglig Vinmonopolet-sync
 
 on:
   schedule:
-    # 06:00 UTC = 08:00 norsk sommertid, 07:00 vintertid
-    # Vinmonopolets master-data oppdateres ~05:45 CET, så vi treffer ferskt.
-    - cron: "0 6 * * *"
+    # 05:13 UTC = 07:13 norsk sommertid, 06:13 vintertid.
+    # Off-peak-minutt unngår GH Actions schedule-forsinkelse på topp-av-time
+    # (verifisert: "0 6" ble forsinket 4-6 timer hver dag i mai 2026).
+    # Vinmonopolets master-data oppdateres ~05:45 CET, så data er moden
+    # lenge før vi treffer.
+    - cron: "13 5 * * *"
   workflow_dispatch: # tillater manuell kjøring fra Actions-fanen
 
 jobs:
