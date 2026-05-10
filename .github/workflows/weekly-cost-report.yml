@@ -1,13 +1,17 @@
 name: Ukentlig kostnadsrapport
 
 # Kjører hver søndag 17:00 UTC = 18:00 norsk vintertid / 19:00 sommertid.
-# Henter alle enrichment_runs siste 7 dager, oppsummerer kostnad,
-# leverer som GH Actions step summary + push-varsel til abonnerte enheter.
+# Henter alle enrichment_runs siste 7 dager, oppsummerer kostnad, og leverer
+# rapporten som (a) GH Actions step summary og (b) kommentar på et fast
+# GitHub Issue. GitHub mailer Marius automatisk fordi han er repo-eier.
 
 on:
   schedule:
     - cron: "0 17 * * 0"
   workflow_dispatch:
+
+permissions:
+  issues: write   # for å opprette/kommentere på rapport-issue
 
 jobs:
   report:
@@ -27,6 +31,29 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SITE_URL: https://polkupp.vercel.app
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          REPORT_OUTPUT_PATH: ${{ runner.temp }}/report.md
         run: node scripts/weekly-cost-report.mjs
+
+      - name: Post som GitHub Issue-kommentar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPORT_FILE: ${{ runner.temp }}/report.md
+        run: |
+          # Finn eksisterende rapport-issue, eller opprett ett. Vi holder alle
+          # ukerapporter på samme issue så Marius får én tråd å følge.
+          ISSUE_TITLE="📊 Polkupp ukentlige kostnadsrapporter"
+          ISSUE_NUMBER=$(gh issue list --state open --search "$ISSUE_TITLE in:title" --json number --jq '.[0].number')
+          if [ -z "$ISSUE_NUMBER" ] || [ "$ISSUE_NUMBER" = "null" ]; then
+            ISSUE_NUMBER=$(gh issue create \
+              --title "$ISSUE_TITLE" \
+              --body "Auto-genererte ukentlige rapporter fra weekly-cost-report-workflow. Hver søndag legges en ny kommentar her." \
+              --label "report" 2>/dev/null | tail -1 | sed 's|.*/||')
+            # Hvis label ikke finnes, prøv uten
+            if [ -z "$ISSUE_NUMBER" ]; then
+              ISSUE_NUMBER=$(gh issue create \
+                --title "$ISSUE_TITLE" \
+                --body "Auto-genererte ukentlige rapporter fra weekly-cost-report-workflow. Hver søndag legges en ny kommentar her." | tail -1 | sed 's|.*/||')
+            fi
+          fi
+          echo "Posting til issue #$ISSUE_NUMBER"
+          gh issue comment "$ISSUE_NUMBER" --body-file "$REPORT_FILE"
