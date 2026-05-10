@@ -182,7 +182,7 @@ export default function App() {
     })();
 
     return () => { cancelled = true; };
-  }, [category, sort, search, filters, page, sinceDate]);
+  }, [category, sort, search, filters, page, pageSize, sinceDate]);
 
   // Reviews for synlige viner
   useEffect(() => {
@@ -372,9 +372,9 @@ export default function App() {
                   <div className="grid">
                     {g.wines.map(w => (
                       <WineCard
-                        key={w.id}
+                        key={`${w.id}-${w._drop?.drop_date ?? "x"}`}
                         wine={w}
-                        drop={dropsByWine[w.id]}
+                        drop={w._drop ?? dropsByWine[w.id]}
                         review={reviewsByWine[w.id]}
                         location={location}
                         onAskLocation={askLocation}
