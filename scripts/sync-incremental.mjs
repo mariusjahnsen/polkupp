@@ -289,13 +289,25 @@ async function main() {
       const oldP = parseFloat(ex.current_price);
       const newP = parseFloat(wine.current_price);
       if (oldP > 0 && newP < oldP) {
-        const pct = parseFloat(((oldP - newP) / oldP * 100).toFixed(2));
+        // Bevar høyeste price_before hvis dagen allerede har en drop registrert
+        // (manuell sync etter cron osv.) — ellers understates pct_drop ved at
+        // andre kjøring overskriver med mellom-prisen som "før".
+        const { data: existingDrop } = await supabase
+          .from("daily_drops")
+          .select("price_before")
+          .eq("wine_id", upserted.id)
+          .eq("drop_date", today)
+          .maybeSingle();
+        const effectiveBefore = existingDrop?.price_before
+          ? Math.max(parseFloat(existingDrop.price_before), oldP)
+          : oldP;
+        const pct = parseFloat(((effectiveBefore - newP) / effectiveBefore * 100).toFixed(2));
         await supabase.from("daily_drops").upsert({
           wine_id: upserted.id, drop_date: today,
-          price_before: oldP, price_after: newP, pct_drop: pct,
+          price_before: effectiveBefore, price_after: newP, pct_drop: pct,
         }, { onConflict: "wine_id,drop_date" });
         drops++;
-        console.log(`  💧 DROP ${wine.name}: ${oldP} → ${newP} kr (-${pct}%)`);
+        console.log(`  💧 DROP ${wine.name}: ${effectiveBefore} → ${newP} kr (-${pct}%)`);
       }
     }
 
