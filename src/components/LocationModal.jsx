@@ -7,23 +7,13 @@ export default function LocationModal({ onChosen, onClose }) {
   const [busy, setBusy] = useState(false);
 
   const tryGps = async () => {
-    console.log("[Polkupp DEBUG] tryGps START");
     setError(null); setBusy(true);
     try {
-      console.log("[Polkupp DEBUG] calling getGpsLocation");
       const loc = await getGpsLocation();
-      console.log("[Polkupp DEBUG] got location:", loc);
       setLocation(loc);
-      console.log("[Polkupp DEBUG] saved to localStorage, calling onChosen");
       onChosen(loc);
-      console.log("[Polkupp DEBUG] onChosen returned");
-    } catch (e) {
-      console.error("[Polkupp DEBUG] tryGps catch:", e);
-      setError(e.message);
-    } finally {
-      console.log("[Polkupp DEBUG] tryGps finally, busy=false");
-      setBusy(false);
-    }
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
   };
 
   const tryPostnr = (e) => {
