@@ -145,19 +145,50 @@ async function main() {
     .is("html_fetched_at", null);
   console.log(`Totalt ${remaining} viner mangler html_fetched_at. Tar ${targets.length} denne kjøringen.\n`);
 
-  let ok = 0, fail = 0;
+  let ok = 0, fail = 0, drops = 0;
+  const today = new Date().toISOString().slice(0, 10);
   for (let i = 0; i < targets.length; i++) {
     const w = targets[i];
     try {
       const product = await fetchProductFromHtml(w.vinmonopolet_id);
       const row = toWineRow(product);
+      const oldPrice = w.current_price != null ? parseFloat(w.current_price) : null;
+      const newPrice = row.current_price != null ? parseFloat(row.current_price) : null;
+
       if (!DRY_RUN) {
         const { error: upErr } = await supabase.from("wines").update(row).eq("id", w.id);
         if (upErr) throw upErr;
+
+        // Pris-snapshot (samme som sync-incremental — append-only daglig)
+        if (newPrice != null) {
+          await supabase.from("price_history").insert({ wine_id: w.id, price: newPrice });
+        }
+
+        // Drop-detection: hvis sync-incremental av en eller annen grunn ikke
+        // fanget prisendringen, fang den her. Bevarer høyeste price_before
+        // ved konflikt (matcher sync-incremental sin logikk).
+        if (oldPrice != null && newPrice != null && oldPrice > 0 && newPrice < oldPrice) {
+          const { data: existingDrop } = await supabase
+            .from("daily_drops")
+            .select("price_before")
+            .eq("wine_id", w.id)
+            .eq("drop_date", today)
+            .maybeSingle();
+          const effectiveBefore = existingDrop?.price_before
+            ? Math.max(parseFloat(existingDrop.price_before), oldPrice)
+            : oldPrice;
+          const pct = parseFloat(((effectiveBefore - newPrice) / effectiveBefore * 100).toFixed(2));
+          await supabase.from("daily_drops").upsert({
+            wine_id: w.id, drop_date: today,
+            price_before: effectiveBefore, price_after: newPrice, pct_drop: pct,
+          }, { onConflict: "wine_id,drop_date" });
+          drops++;
+          console.log(`  💧 DROP ${row.name}: ${effectiveBefore} → ${newPrice} kr (-${pct}%)`);
+        }
       }
       ok++;
       if (ok % 25 === 0 || ok === targets.length) {
-        console.log(`  ${ok}/${targets.length} (${fail} feil) — sist: ${w.name?.slice(0,60)}`);
+        console.log(`  ${ok}/${targets.length} (${fail} feil, ${drops} drops) — sist: ${w.name?.slice(0,60)}`);
       }
     } catch (e) {
       fail++;
@@ -170,7 +201,7 @@ async function main() {
     await sleep(2000);  // 2s throttle — under tid for å være snill mot Cloudflare på vinmonopolet.no
   }
 
-  console.log(`\nFerdig: ${ok} oppdatert, ${fail} feilet av ${targets.length} forsøk.`);
+  console.log(`\nFerdig: ${ok} oppdatert, ${fail} feilet, ${drops} drops detected av ${targets.length} forsøk.`);
   console.log(`Ca. ${remaining - ok} gjenstår — kjør igjen for å fortsette.`);
 }
 
