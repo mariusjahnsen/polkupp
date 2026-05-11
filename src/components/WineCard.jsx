@@ -1,8 +1,31 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import StoreList from "./StoreList.jsx";
 
 export default function WineCard({ wine, drop, review, location, onAskLocation }) {
   const [showStores, setShowStores] = useState(false);
+  const cardRef = useRef(null);
+  const autoShownRef = useRef(false);
+
+  // Auto-vis lager når kortet ruller inn i viewport (kun én gang per sesjon
+  // per kort, så bruker som skjuler manuelt forblir skjult).
+  useEffect(() => {
+    if (!location || autoShownRef.current) return;
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          autoShownRef.current = true;
+          setShowStores(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "100px" }   // forhåndshent like før kortet er synlig
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [location]);
 
   const priceFmt = (p) =>
     new Intl.NumberFormat("no-NO", {
@@ -13,7 +36,10 @@ export default function WineCard({ wine, drop, review, location, onAskLocation }
 
   const onClickStores = () => {
     if (!location) {
-      onAskLocation(() => setShowStores(true));
+      onAskLocation(() => {
+        autoShownRef.current = true;   // hindre at observer re-aktiverer
+        setShowStores(true);
+      });
       return;
     }
     setShowStores(s => !s);
@@ -26,7 +52,7 @@ export default function WineCard({ wine, drop, review, location, onAskLocation }
     : null;
 
   return (
-    <article className="wine-card">
+    <article className="wine-card" ref={cardRef}>
       {wine.image_url && (
         <a href={wine.product_url} target="_blank" rel="noopener noreferrer" className="wine-image-wrap">
           <img src={wine.image_url} alt={wine.name} loading="lazy" />
