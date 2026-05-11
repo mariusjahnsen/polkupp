@@ -290,7 +290,7 @@ export default function App() {
             }}
           >
             <h1>Polkupp</h1>
-            <p className="tagline">Vinmonopolets prisnedsettelser, daglig.</p>
+            <p className="tagline">Vinmonopolets prisnedsettelser, oppdatert daglig.</p>
           </a>
           <div className="header-actions">
             <NotificationButton />
@@ -312,7 +312,7 @@ export default function App() {
       <section>
         <div className="browse-header">
           <h2 className="section-title">
-            {showingDrops && !noDropsAtAll ? "Dagens drops" : "Hele utvalget"}
+            {showingDrops && !noDropsAtAll ? "Siste drops" : "Hele utvalget"}
           </h2>
           <p className="count">
             {totalCount > 0 && (
